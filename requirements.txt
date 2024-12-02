@@ -46,7 +46,6 @@ cloudpickle==2.2.1
 colorama==0.4.5
 comm==0.1.0
 commonmark==0.9.1
-conda==4.12.0
 config==0.5.1
 configparser==7.1.0
 contourpy==1.0.7
@@ -323,5 +322,4 @@ xgboost==1.6.1
 xlrd==2.0.1
 xxhash==3.5.0
 yarl==1.8.2
-zc.lockfile==3.0.post1
 zipp==3.8.1
