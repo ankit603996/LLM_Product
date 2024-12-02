@@ -11,6 +11,7 @@ from sentence_transformers import SentenceTransformer
 pdf_path = "COL- Statistical Methods of Decision Making - Prof. P K Vishwanathan.pdf"  # Replace with your PDF file path
 loader = PyPDFLoader(pdf_path)
 docs = loader.load()
+# Create a text splitter with a fixed chunk size
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 text_splitter = RecursiveCharacterTextSplitter()
 documents = text_splitter.split_documents(docs)
