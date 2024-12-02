@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF QA App</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <h1>Upload PDF and Ask Questions</h1>
+    <form id="upload-form" enctype="multipart/form-data">
+        <input type="file" name="file" id="file-input" accept="application/pdf" required>
+        <button type="submit">Upload PDF</button>
+    </form>
+    <div id="upload-response"></div>
+    <hr>
+    <form id="question-form">
+        <input type="text" id="question-input" placeholder="Ask your question" required>
+        <button type="submit">Submit</button>
+    </form>
+    <div id="answer"></div>
+
+    <script>
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            const fileInput = document.getElementById('file-input');
+            formData.append('file', fileInput.files[0]);
+
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.json();
+            document.getElementById('upload-response').innerText = result.message || result.error;
+        });
+
+        document.getElementById('question-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const question = document.getElementById('question-input').value;
+
+            const response = await fetch('/ask', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const result = await response.json();
+            document.getElementById('answer').innerText = result.answer || result.error;
+        });
+    </script>
+</body>
+</html>

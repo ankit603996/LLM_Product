@@ -1,0 +1,83 @@
+/* General Styles */
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    background-color: #f9f9f9;
+    color: #333;
+}
+
+/* Header */
+h1 {
+    text-align: center;
+    margin-top: 20px;
+    color: #4CAF50;
+}
+
+/* Form Styles */
+form {
+    max-width: 600px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+input[type="file"],
+input[type="text"] {
+    width: calc(100% - 20px);
+    padding: 10px;
+    margin: 10px 0;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+button {
+    display: inline-block;
+    padding: 10px 20px;
+    margin-top: 10px;
+    font-size: 16px;
+    color: #fff;
+    background-color: #4CAF50;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover {
+    background-color: #45a049;
+}
+
+/* Response Messages */
+#upload-response,
+#answer {
+    max-width: 600px;
+    margin: 20px auto;
+    padding: 15px;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+#upload-response {
+    background-color: #f0f8ff;
+    border: 1px solid #d1ecf1;
+    color: #0c5460;
+}
+
+#answer {
+    background-color: #eafbea;
+    border: 1px solid #c3e6cb;
+    color: #155724;
+}
+
+/* Divider */
+hr {
+    max-width: 600px;
+    margin: 30px auto;
+    border: none;
+    border-top: 1px solid #ddd;
+}
