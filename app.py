@@ -54,12 +54,9 @@ def upload_pdf():
     text_splitter = RecursiveCharacterTextSplitter()
     documents = text_splitter.split_documents(docs)
     vector = FAISS.from_documents(documents, embeddings)
+    global retriever
     retriever = vector.as_retriever()
 
-    # Store retriever globally (or use session storage)
-    global retrieval_chain
-    document_chain = create_stuff_documents_chain(llm, prompt)
-    retrieval_chain = create_retrieval_chain(retriever, document_chain)
 
     return jsonify({'message': 'File uploaded and processed successfully'}), 200
 
@@ -69,10 +66,12 @@ def ask_question():
     question = request.json.get('question')
     if not question:
         return jsonify({'error': 'No question provided'}), 400
+    # Store retriever globally (or use session storage)
+    document_chain = create_stuff_documents_chain(llm, prompt)
 
+    retrieval_chain = create_retrieval_chain(retriever, document_chain)
     response = retrieval_chain.invoke({"input": question})
     return jsonify({'answer': response["answer"]})
-
 
 if __name__ == '__main__':
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
