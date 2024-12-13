@@ -13,7 +13,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 import os
 
 app = Flask(__name__)
-#app.config['UPLOAD_FOLDER'] = './uploads'
+##app.config['UPLOAD_FOLDER'] = './uploads'
 
 # Load models and setup pipelines globally
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
