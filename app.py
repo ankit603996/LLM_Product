@@ -13,7 +13,7 @@ from langchain.chains.combine_documents import create_stuff_documents_chain
 import os
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = './uploads'
+#app.config['UPLOAD_FOLDER'] = './uploads'
 
 # Load models and setup pipelines globally
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
@@ -46,7 +46,9 @@ def upload_pdf():
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
+    import tempfile
+
+    file_path = os.path.join(tempfile.gettempdir(), file.filename)
     file.save(file_path)
 
     # Process the PDF
@@ -75,5 +77,5 @@ def ask_question():
     return jsonify({'answer': response["answer"]})
 
 if __name__ == '__main__':
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+#    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
     app.run(debug=True)
