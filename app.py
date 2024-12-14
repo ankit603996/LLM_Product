@@ -4,8 +4,7 @@ from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
-from langchain.llms import HuggingFacePipeline
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from langchain.llms import HuggingFaceHub
 from langchain.prompts import PromptTemplate
 from langchain.chains import create_retrieval_chain
 from langchain.chains.combine_documents import create_stuff_documents_chain
@@ -14,15 +13,19 @@ import os
 
 app = Flask(__name__)
 #app.config['UPLOAD_FOLDER'] = './uploads'
-
+from dotenv import load_dotenv
+load_dotenv()
+print(f"Token: {os.getenv('HUGGINGFACEHUB_API_TOKEN')}")
 # Load models and setup pipelines globally
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-model_name = "EleutherAI/gpt-neo-125M"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=100, temperature=0.01)
-llm = HuggingFacePipeline(pipeline=pipe)
 
+# Load models and setup pipelines using Hugging Face API
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
+# Replace local model with Hugging Face Hub
+llm = HuggingFaceHub(
+    repo_id="EleutherAI/gpt-neo-125M",
+    model_kwargs={"max_new_tokens": 100, "temperature": 0.01},
+)
 prompt = PromptTemplate(
     input_variables=["context", "input"],
     template="""Answer the following question based only on the provided context:
