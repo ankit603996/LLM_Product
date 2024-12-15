@@ -2,7 +2,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Training
+# Training
 
 
 # ## Technically, it's only a few lines of code to run on GPUs (elsewhere, ie. on Lamini).
