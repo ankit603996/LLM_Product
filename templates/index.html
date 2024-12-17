@@ -14,13 +14,27 @@
     </form>
     <div id="upload-response"></div>
     <hr>
+
+    <!-- Form for question with retrieval -->
+    <h2>Ask a Question (PDF Context)</h2>
     <form id="question-form">
-        <input type="text" id="question-input" placeholder="Ask your question" required>
+        <input type="text" id="question-input" placeholder="Ask your question with PDF context" required>
         <button type="submit">Submit</button>
     </form>
     <div id="answer"></div>
 
+    <hr>
+
+    <!-- Form for direct LLM question -->
+    <h2>Ask a Question (LLM Only)</h2>
+    <form id="direct-question-form">
+        <input type="text" id="direct-question-input" placeholder="Ask your question directly" required>
+        <button type="submit">Submit</button>
+    </form>
+    <div id="direct-answer"></div>
+
     <script>
+        // Upload PDF
         document.getElementById('upload-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const formData = new FormData();
@@ -35,6 +49,7 @@
             document.getElementById('upload-response').innerText = result.message || result.error;
         });
 
+        // Ask question with PDF context
         document.getElementById('question-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const question = document.getElementById('question-input').value;
@@ -46,6 +61,20 @@
             });
             const result = await response.json();
             document.getElementById('answer').innerText = result.answer || result.error;
+        });
+
+        // Ask direct question without context
+        document.getElementById('direct-question-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const question = document.getElementById('direct-question-input').value;
+
+            const response = await fetch('/ask_direct', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ question })
+            });
+            const result = await response.json();
+            document.getElementById('direct-answer').innerText = result.answer || result.error;
         });
     </script>
 </body>

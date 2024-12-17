@@ -23,15 +23,15 @@ embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-
 
 # Replace local model with Hugging Face Hub
 llm = HuggingFaceHub(
-    repo_id="EleutherAI/gpt-neo-125M",
+    repo_id="google/flan-t5-large",
     model_kwargs={"max_new_tokens": 100, "temperature": 0.01},
 )
 prompt = PromptTemplate(
     input_variables=["context", "input"],
     template="""Answer the following question based only on the provided context:
-<context>
+BEGIN CONTEXT
 {context}
-</context>
+END CONTEXT
 Question: {input}"""
 )
 
@@ -74,10 +74,25 @@ def ask_question():
         return jsonify({'error': 'No question provided'}), 400
     # Store retriever globally (or use session storage)
     document_chain = create_stuff_documents_chain(llm, prompt)
-
+    print(question)
     retrieval_chain = create_retrieval_chain(retriever, document_chain)
     response = retrieval_chain.invoke({"input": question})
     return jsonify({'answer': response["answer"]})
+
+
+@app.route('/ask_direct', methods=['POST'])
+def ask_direct_question():
+    """
+    Directly uses LLM to generate answers without retrieving context from the uploaded PDF.
+    """
+    question = request.json.get('question')
+    if not question:
+        return jsonify({'error': 'No question provided'}), 400
+
+    # Direct LLM invocation without retrieval
+    response = llm.invoke(question)
+    return jsonify({'answer': response})
+
 
 if __name__ == '__main__':
 #    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
