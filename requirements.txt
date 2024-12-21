@@ -25,6 +25,7 @@ httpx==0.28.0
 httpx-sse==0.4.0
 huggingface-hub==0.26.5
 idna==3.10
+InstructorEmbedding==1.0.1
 itsdangerous==2.2.0
 Jinja2==3.1.4
 jiter==0.8.0
@@ -66,8 +67,10 @@ SQLAlchemy==2.0.36
 sympy==1.13.1
 tenacity==9.0.0
 threadpoolctl==3.5.0
-tokenizers==0.20.3
+tokenizers==0.21.0
+torch==2.5.1
 tqdm==4.67.1
+transformers==4.47.0
 typing-inspect==0.9.0
 typing_extensions==4.12.2
 urllib3==2.2.3
