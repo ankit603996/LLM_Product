@@ -19,7 +19,7 @@ print(f"Token: {os.getenv('HUGGINGFACEHUB_API_TOKEN')}")
 # Load models and setup pipelines globally
 
 # Load models and setup pipelines using Hugging Face API
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
 
 # Replace local model with Hugging Face Hub
 llm = HuggingFaceHub(
