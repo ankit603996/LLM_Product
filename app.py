@@ -57,11 +57,14 @@ def upload_pdf():
     # Process the PDF
     loader = PyPDFLoader(file_path)
     docs = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter()
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,  # Maximum size of each chunk
+        chunk_overlap=200)
     documents = text_splitter.split_documents(docs)
     vector = FAISS.from_documents(documents, embeddings)
     global retriever
-    retriever = vector.as_retriever()
+    retriever = vector.as_retriever(search_kwargs={"k": 5})  # Retrieve top 5 documents
+
 
 
     return jsonify({'message': 'File uploaded and processed successfully'}), 200
