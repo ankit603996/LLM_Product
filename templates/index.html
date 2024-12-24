@@ -3,78 +3,386 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF QA App</title>
-    <link rel="stylesheet" href="/static/styles.css">
+    <title>RAG Pipeline Demo</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #1e40af;
+            --success-color: #22c55e;
+            --background-color: #f8fafc;
+            --border-color: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: var(--background-color);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+            padding: 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1rem;
+        }
+
+        .upload-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .file-drop-area {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 2rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .file-drop-area:hover {
+            border-color: var(--primary-color);
+            background-color: #f0f9ff;
+        }
+
+        .file-drop-area.dragging {
+            background-color: #f0f9ff;
+            border-color: var(--primary-color);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 10px;
+            background-color: #e2e8f0;
+            border-radius: 5px;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background-color: var(--success-color);
+            border-radius: 5px;
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .question-section {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .question-input {
+            width: 100%;
+            padding: 1rem;
+            border: 2px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        .question-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .submit-btn {
+            padding: 0.8rem 1.5rem;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s ease;
+        }
+
+        .submit-btn:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .submit-btn:disabled {
+            background-color: #cbd5e1;
+            cursor: not-allowed;
+        }
+
+        .answers-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .answer-box {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .answer-box h2 {
+            color: var(--primary-color);
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .answer-content {
+            min-height: 100px;
+            padding: 1rem;
+            background-color: #f8fafc;
+            border-radius: 8px;
+            font-size: 1rem;
+            line-height: 1.6;
+        }
+
+        .status-message {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .status-message.success {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+
+        .status-message.error {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid var(--primary-color);
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
 </head>
 <body>
-    <h1>Upload PDF and Ask Questions</h1>
-    <form id="upload-form" enctype="multipart/form-data">
-        <input type="file" name="file" id="file-input" accept="application/pdf" required>
-        <button type="submit">Upload PDF</button>
-    </form>
-    <div id="upload-response"></div>
-    <hr>
+    <div class="container">
+        <div class="header">
+            <h1>RAG Pipeline Demo</h1>
+            <p>Experience the power of Retrieval-Augmented Generation</p>
+        </div>
 
-    <!-- Form for question with retrieval -->
-    <h2>Ask a Question (PDF Context)</h2>
-    <form id="question-form">
-        <input type="text" id="question-input" placeholder="Ask your question with PDF context" required>
-        <button type="submit">Submit</button>
-    </form>
-    <div id="answer"></div>
+        <div class="upload-section">
+            <div class="file-drop-area" id="dropArea">
+                <input type="file" id="file-input" accept="application/pdf" style="display: none">
+                <p>Drag & drop your PDF here or click to browse</p>
+                <div class="progress-bar" id="progress-bar">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+            </div>
+            <div id="upload-status" class="status-message"></div>
+        </div>
 
-    <hr>
+        <div class="question-section">
+            <input type="text" id="question-input" class="question-input"
+                   placeholder="Ask your question..." disabled>
+            <button id="submit-btn" class="submit-btn" disabled>Submit Question</button>
+        </div>
 
-    <!-- Form for direct LLM question -->
-    <h2>Ask a Question (LLM Only)</h2>
-    <form id="direct-question-form">
-        <input type="text" id="direct-question-input" placeholder="Ask your question directly" required>
-        <button type="submit">Submit</button>
-    </form>
-    <div id="direct-answer"></div>
+        <div class="answers-container">
+            <div class="answer-box">
+                <h2>RAG-Enhanced Answer</h2>
+                <div id="rag-answer" class="answer-content"></div>
+            </div>
+
+            <div class="answer-box">
+                <h2>Direct LLM Answer</h2>
+                <div id="llm-answer" class="answer-content"></div>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // Upload PDF
-        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+        const dropArea = document.getElementById('dropArea');
+        const fileInput = document.getElementById('file-input');
+        const progressBar = document.getElementById('progress-bar');
+        const progressFill = document.getElementById('progress-fill');
+        const uploadStatus = document.getElementById('upload-status');
+        const questionInput = document.getElementById('question-input');
+        const submitBtn = document.getElementById('submit-btn');
+
+        // Drag and drop handlers
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
             e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropArea.classList.add('dragging');
+        }
+
+        function unhighlight(e) {
+            dropArea.classList.remove('dragging');
+        }
+
+        // Handle file selection both from drop and click
+        dropArea.addEventListener('drop', handleDrop, false);
+        dropArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFileSelect);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }
+
+        function handleFileSelect(e) {
+            const files = e.target.files;
+            handleFiles(files);
+        }
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                const file = files[0];
+                if (file.type === 'application/pdf') {
+                    uploadFile(file);
+                } else {
+                    showStatus('Please select a PDF file', 'error');
+                }
+            }
+        }
+
+        function uploadFile(file) {
             const formData = new FormData();
-            const fileInput = document.getElementById('file-input');
-            formData.append('file', fileInput.files[0]);
+            formData.append('file', file);
 
-            const response = await fetch('/upload', {
-                method: 'POST',
-                body: formData
+            progressBar.style.display = 'block';
+            progressFill.style.width = '0%';
+            showStatus('Uploading file...', 'info');
+
+            const xhr = new XMLHttpRequest();
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    const percent = (e.loaded / e.total) * 100;
+                    progressFill.style.width = percent + '%';
+                }
             });
-            const result = await response.json();
-            document.getElementById('upload-response').innerText = result.message || result.error;
-        });
 
-        // Ask question with PDF context
-        document.getElementById('question-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const question = document.getElementById('question-input').value;
-
-            const response = await fetch('/ask', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question })
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    showStatus('File uploaded successfully! You can now ask questions.', 'success');
+                    enableQuestionInput();
+                } else {
+                    showStatus('Upload failed. Please try again.', 'error');
+                }
             });
-            const result = await response.json();
-            document.getElementById('answer').innerText = result.answer || result.error;
-        });
 
-        // Ask direct question without context
-        document.getElementById('direct-question-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const question = document.getElementById('direct-question-input').value;
-
-            const response = await fetch('/ask_direct', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ question })
+            xhr.addEventListener('error', () => {
+                showStatus('Upload failed. Please try again.', 'error');
             });
-            const result = await response.json();
-            document.getElementById('direct-answer').innerText = result.answer || result.error;
+
+            xhr.open('POST', '/upload');
+            xhr.send(formData);
+        }
+
+        function showStatus(message, type) {
+            uploadStatus.textContent = message;
+            uploadStatus.className = 'status-message ' + type;
+        }
+
+        function enableQuestionInput() {
+            questionInput.disabled = false;
+            submitBtn.disabled = false;
+        }
+
+        // Handle question submission
+        submitBtn.addEventListener('click', async () => {
+            const question = questionInput.value.trim();
+            if (!question) return;
+
+            // Disable input while processing
+            questionInput.disabled = true;
+            submitBtn.disabled = true;
+
+            // Show loading state
+            document.getElementById('rag-answer').innerHTML = '<div class="loading"></div>Generating response...';
+            document.getElementById('llm-answer').innerHTML = '<div class="loading"></div>Generating response...';
+
+            try {
+                const [ragResponse, llmResponse] = await Promise.all([
+                    fetch('/ask', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question })
+                    }),
+                    fetch('/ask_direct', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ question })
+                    })
+                ]);
+
+                const ragResult = await ragResponse.json();
+                const llmResult = await llmResponse.json();
+
+                document.getElementById('rag-answer').textContent = ragResult.answer || ragResult.error;
+                document.getElementById('llm-answer').textContent = llmResult.answer || llmResult.error;
+            } catch (error) {
+                document.getElementById('rag-answer').textContent = 'Error generating response';
+                document.getElementById('llm-answer').textContent = 'Error generating response';
+            }
+
+            // Re-enable input
+            questionInput.disabled = false;
+            submitBtn.disabled = false;
         });
     </script>
 </body>
