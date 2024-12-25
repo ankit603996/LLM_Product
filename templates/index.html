@@ -14,8 +14,9 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             height: 100vh;
+            overflow-y: auto;
         }
 
         .container {
@@ -112,6 +113,16 @@
             background-color: #fee2e2;
             color: #991b1b;
         }
+
+        #file-names {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #555;
+        }
+
+        #file-names span {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -120,8 +131,9 @@
     <div class="container">
         <h2>Upload PDF or Provide Website URL</h2>
         <form id="upload-form" enctype="multipart/form-data">
-            <label for="file-input">Upload PDF:</label>
-            <input type="file" name="file" id="file-input" accept="application/pdf">
+            <label for="file-input">Upload PDFs:</label>
+            <input type="file" name="files" id="file-input" accept="application/pdf" multiple>
+            <div id="file-names"></div>
 
             <label for="url-input">Website URL:</label>
             <input type="text" name="url" id="url-input" placeholder="Enter website URL">
@@ -161,12 +173,19 @@
     <script>
         const uploadForm = document.getElementById('upload-form');
         const questionForm = document.getElementById('question-form');
+        const fileInput = document.getElementById('file-input');
+        const fileNames = document.getElementById('file-names');
         const submitButton = document.getElementById('submit-button');
         const uploadResponse = document.getElementById('upload-response');
         const uploadProgress = document.getElementById('upload-progress');
         const questionProgress = document.getElementById('question-progress');
         const ragAnswer = document.getElementById('rag-answer');
         const directAnswer = document.getElementById('direct-answer');
+
+        fileInput.addEventListener('change', () => {
+            const files = Array.from(fileInput.files);
+            fileNames.innerHTML = files.map(file => `<span>${file.name}</span>`).join('');
+        });
 
         uploadForm.addEventListener('submit', async (e) => {
             e.preventDefault();

@@ -83,18 +83,19 @@ def crawl_website(url):
 
 @app.route('/upload', methods=['POST'])
 def upload_inputs():
-    file = request.files.get('file')
+    files = request.files.getlist('files')  # Get multiple files from the form
     url = request.form.get('url')
 
     documents = []
 
-    # Process PDF if uploaded
-    if file and file.filename != '':
-        import tempfile
-        file_path = os.path.join(tempfile.gettempdir(), file.filename)
-        file.save(file_path)
-        documents += extract_text_from_pdf(file_path)
-        os.remove(file_path)
+    # Process each uploaded PDF
+    for file in files:
+        if file and file.filename != '':
+            import tempfile
+            file_path = os.path.join(tempfile.gettempdir(), file.filename)
+            file.save(file_path)
+            documents += extract_text_from_pdf(file_path)
+            os.remove(file_path)
 
     # Process URL if provided
     if url and url.strip():
