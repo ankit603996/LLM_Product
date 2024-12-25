@@ -6,6 +6,7 @@ from langchain.prompts import PromptTemplate
 import requests
 import os
 import PyPDF2
+from bs4 import BeautifulSoup
 from langchain.schema import Document
 from langchain.embeddings.base import Embeddings
 from dotenv import load_dotenv
@@ -23,7 +24,6 @@ HEADERS = {
     "api-key": API_KEY,
 }
 
-
 class AzureOpenAIEmbeddings(Embeddings):
     def __init__(self, api_key, endpoint):
         self.api_key = api_key
@@ -34,9 +34,7 @@ class AzureOpenAIEmbeddings(Embeddings):
         }
 
     def embed_documents(self, texts):
-        payload = {
-            "input": texts
-        }
+        payload = {"input": texts}
         try:
             response = requests.post(self.endpoint, headers=self.headers, json=payload)
             response.raise_for_status()
@@ -47,7 +45,6 @@ class AzureOpenAIEmbeddings(Embeddings):
 
     def embed_query(self, query):
         return self.embed_documents([query])[0]
-
 
 # Initialize embeddings
 embeddings = AzureOpenAIEmbeddings(API_KEY_EMBEDDING, ENDPOINT_EMBEDDING)
@@ -60,34 +57,53 @@ END CONTEXT
 Question: {input}
 Answer:"""
 
-
 @app.route('/')
 def home():
     return render_template('index.html')
 
+def extract_text_from_pdf(file_path):
+    documents = []
+    with open(file_path, 'rb') as f:
+        reader = PyPDF2.PdfReader(f)
+        for i, page in enumerate(reader.pages):
+            text = page.extract_text()
+            documents.append(Document(page_content=text, metadata={"page_number": i + 1}))
+    return documents
+
+def crawl_website(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, 'html.parser')
+        paragraphs = soup.find_all('p')
+        content = "\n".join([p.get_text() for p in paragraphs])
+        return [Document(page_content=content, metadata={"source": url})]
+    except requests.RequestException as e:
+        raise RuntimeError(f"Failed to fetch website content: {e}")
 
 @app.route('/upload', methods=['POST'])
-def upload_pdf():
-    if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
+def upload_inputs():
+    file = request.files.get('file')
+    url = request.form.get('url')
 
-    file = request.files['file']
-    if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+    documents = []
 
-    import tempfile
-    file_path = os.path.join(tempfile.gettempdir(), file.filename)
-    file.save(file_path)
+    # Process PDF if uploaded
+    if file and file.filename != '':
+        import tempfile
+        file_path = os.path.join(tempfile.gettempdir(), file.filename)
+        file.save(file_path)
+        documents += extract_text_from_pdf(file_path)
+        os.remove(file_path)
 
-    # Process the PDF
+    # Process URL if provided
+    if url and url.strip():
+        documents += crawl_website(url)
+
+    if not documents:
+        return jsonify({'error': 'No valid inputs provided'}), 400
+
     try:
-        documents = []
-        with open(file_path, 'rb') as f:
-            reader = PyPDF2.PdfReader(f)
-            for i, page in enumerate(reader.pages):
-                text = page.extract_text()
-                documents.append(Document(page_content=text, metadata={"page_number": i + 1}))
-
         # Split documents
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
         split_documents = text_splitter.split_documents(documents)
@@ -97,15 +113,10 @@ def upload_pdf():
         global retriever
         retriever = vector.as_retriever(search_kwargs={"k": 10})
 
-        return jsonify({'message': 'File uploaded and processed successfully'}), 200
+        return jsonify({'message': 'Inputs processed successfully'}), 200
 
     except Exception as e:
-        return jsonify({'error': f"Failed to process PDF: {str(e)}"}), 500
-    finally:
-        # Clean up temporary file
-        if os.path.exists(file_path):
-            os.remove(file_path)
-
+        return jsonify({'error': f"Failed to process inputs: {str(e)}"}), 500
 
 @app.route('/ask', methods=['POST'])
 def ask_question():
@@ -139,7 +150,6 @@ def ask_question():
     except Exception as e:
         return jsonify({'error': f"Error processing request: {str(e)}"}), 500
 
-
 @app.route('/ask_direct', methods=['POST'])
 def ask_direct_question():
     question = request.json.get('question')
@@ -167,7 +177,6 @@ def ask_direct_question():
 
     except Exception as e:
         return jsonify({'error': f"Error processing request: {str(e)}"}), 500
-
 
 if __name__ == '__main__':
     app.run(debug=True)
