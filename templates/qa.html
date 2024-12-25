@@ -1,0 +1,74 @@
+<!-- templates/qa.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Q&A - Enterprise Chatbot Portal</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <nav class="navbar">
+        <a href="{{ url_for('home') }}" class="navbar-brand">
+            <i class="fas fa-robot"></i>
+            <span>Enterprise Chatbot</span>
+        </a>
+        <div class="navbar-menu">
+            <a href="#" class="nav-item">
+                <i class="fas fa-question-circle"></i>
+                <span>Help</span>
+            </a>
+            <a href="#" class="nav-item">
+                <i class="fas fa-user-circle"></i>
+                <span>My Account</span>
+            </a>
+        </div>
+    </nav>
+
+    <div class="main-content">
+        <div class="container">
+            <h2>Test Your Chatbot</h2>
+            <p class="subtitle">Ask questions to test how your chatbot responds with and without context.</p>
+
+            <form id="question-form">
+                <div class="question-section">
+                    <label for="question-input">
+                        <i class="fas fa-question"></i>
+                        Your Question
+                    </label>
+                    <input type="text" id="question-input" placeholder="Enter your question here..." required>
+                    <button type="submit" id="submit-button">
+                        <i class="fas fa-paper-plane"></i>
+                        Ask Question
+                    </button>
+                </div>
+            </form>
+
+            <div class="response-container">
+                <div class="response-box">
+                    <h3>
+                        <i class="fas fa-brain"></i>
+                        Answer with Context (RAG)
+                    </h3>
+                    <div id="rag-answer"></div>
+                </div>
+                <div class="response-box">
+                    <h3>
+                        <i class="fas fa-robot"></i>
+                        Answer without Context (LLM)
+                    </h3>
+                    <div id="direct-answer"></div>
+                </div>
+            </div>
+
+            <div class="progress" id="question-progress">
+                <i class="fas fa-spinner"></i>
+                <p>Fetching the answer, please wait...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='qa.js') }}"></script>
+</body>
+</html>
