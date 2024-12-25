@@ -1,37 +1,64 @@
 from flask import Flask, request, render_template, jsonify
 from langchain.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.embeddings import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
-from langchain.llms import HuggingFaceHub
 from langchain.prompts import PromptTemplate
-from langchain.chains import create_retrieval_chain
-from langchain.chains.combine_documents import create_stuff_documents_chain
-
+import requests
 import os
+import PyPDF2
+from langchain.schema import Document
+from langchain.embeddings.base import Embeddings
 from dotenv import load_dotenv
 
 app = Flask(__name__)
 load_dotenv()
 
-# Load models and setup pipelines
-embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-mpnet-base-v2")
-llm = HuggingFaceHub(
-    repo_id="google/flan-t5-large",
-    model_kwargs={"max_new_tokens": 100, "temperature": 0.01},
-)
+# Azure OpenAI Configuration
+API_KEY = os.getenv("API_KEY")
+ENDPOINT = os.getenv("ENDPOINT")
+ENDPOINT_EMBEDDING = os.getenv("ENDPOINT_EMBEDDING")
+API_KEY_EMBEDDING = os.getenv("API_KEY_EMBEDDING")
+HEADERS = {
+    "Content-Type": "application/json",
+    "api-key": API_KEY,
+}
 
-prompt = PromptTemplate(
-    input_variables=["context", "input"],
-    template="""Answer the following question based only on the provided context:
+
+class AzureOpenAIEmbeddings(Embeddings):
+    def __init__(self, api_key, endpoint):
+        self.api_key = api_key
+        self.endpoint = endpoint
+        self.headers = {
+            "Content-Type": "application/json",
+            "api-key": self.api_key,
+        }
+
+    def embed_documents(self, texts):
+        payload = {
+            "input": texts
+        }
+        try:
+            response = requests.post(self.endpoint, headers=self.headers, json=payload)
+            response.raise_for_status()
+            embeddings = response.json()["data"]
+            return [item["embedding"] for item in embeddings]
+        except requests.RequestException as e:
+            raise RuntimeError(f"Failed to fetch embeddings from Azure OpenAI: {e}")
+
+    def embed_query(self, query):
+        return self.embed_documents([query])[0]
+
+
+# Initialize embeddings
+embeddings = AzureOpenAIEmbeddings(API_KEY_EMBEDDING, ENDPOINT_EMBEDDING)
+
+# Prompt template for RAG
+prompt_template = """Answer the following question based only on the provided context:
 BEGIN CONTEXT
 {context}
 END CONTEXT
-Question: {input}"""
-)
-
-# Global variable for retriever
-retriever = None
+Question: {input}
+Answer:"""
 
 
 @app.route('/')
@@ -43,6 +70,7 @@ def home():
 def upload_pdf():
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
+
     file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
@@ -52,34 +80,64 @@ def upload_pdf():
     file.save(file_path)
 
     # Process the PDF
-    loader = PyPDFLoader(file_path)
-    docs = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
-    )
-    documents = text_splitter.split_documents(docs)
+    try:
+        documents = []
+        with open(file_path, 'rb') as f:
+            reader = PyPDF2.PdfReader(f)
+            for i, page in enumerate(reader.pages):
+                text = page.extract_text()
+                documents.append(Document(page_content=text, metadata={"page_number": i + 1}))
 
-    vector = FAISS.from_documents(documents, embeddings)
-    global retriever
-    retriever = vector.as_retriever(search_kwargs={"k": 5})
+        # Split documents
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
+        split_documents = text_splitter.split_documents(documents)
 
-    return jsonify({'message': 'File uploaded and processed successfully'}), 200
+        # Create vector store
+        vector = FAISS.from_documents(split_documents, embeddings)
+        global retriever
+        retriever = vector.as_retriever(search_kwargs={"k": 10})
+
+        return jsonify({'message': 'File uploaded and processed successfully'}), 200
+
+    except Exception as e:
+        return jsonify({'error': f"Failed to process PDF: {str(e)}"}), 500
+    finally:
+        # Clean up temporary file
+        if os.path.exists(file_path):
+            os.remove(file_path)
 
 
 @app.route('/ask', methods=['POST'])
 def ask_question():
-    if not retriever:
-        return jsonify({'error': 'Please upload a PDF first'}), 400
-
     question = request.json.get('question')
     if not question:
         return jsonify({'error': 'No question provided'}), 400
 
-    document_chain = create_stuff_documents_chain(llm, prompt)
-    retrieval_chain = create_retrieval_chain(retriever, document_chain)
-    response = retrieval_chain.invoke({"input": question})
-    return jsonify({'answer': response["answer"]})
+    try:
+        # Retrieve relevant context
+        docs = retriever.get_relevant_documents(question)
+        context = " ".join([doc.page_content for doc in docs])
+
+        # Prepare payload for Azure OpenAI
+        payload = {
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt_template.format(context=context, input=question)}
+            ],
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "max_tokens": 800
+        }
+
+        # Get response from Azure OpenAI
+        response = requests.post(ENDPOINT, headers=HEADERS, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        answer = result["choices"][0]["message"]["content"]
+        return jsonify({'answer': answer})
+
+    except Exception as e:
+        return jsonify({'error': f"Error processing request: {str(e)}"}), 500
 
 
 @app.route('/ask_direct', methods=['POST'])
@@ -88,8 +146,27 @@ def ask_direct_question():
     if not question:
         return jsonify({'error': 'No question provided'}), 400
 
-    response = llm.invoke(question)
-    return jsonify({'answer': response})
+    try:
+        # Prepare payload for Azure OpenAI
+        payload = {
+            "messages": [
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": question}
+            ],
+            "temperature": 0.7,
+            "top_p": 0.95,
+            "max_tokens": 800
+        }
+
+        # Get response from Azure OpenAI
+        response = requests.post(ENDPOINT, headers=HEADERS, json=payload)
+        response.raise_for_status()
+        result = response.json()
+        answer = result["choices"][0]["message"]["content"]
+        return jsonify({'answer': answer})
+
+    except Exception as e:
+        return jsonify({'error': f"Error processing request: {str(e)}"}), 500
 
 
 if __name__ == '__main__':
