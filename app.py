@@ -1,3 +1,18 @@
+# Your current implementation is not utilizing websockets for streaming responses, despite Streamlit's underlying websocket architecture. Here's why:
+#
+# While Streamlit does use websockets for its internal communication, your code is waiting for the complete response from the OpenAI API before displaying it. This is because:
+#
+# You're using invoke() which waits for the complete response
+# The response is stored and displayed all at once
+# There's no streaming mechanism in your chat implementation
+#
+#
+# The pauses you're seeing are because:
+#
+#1 The full response is generated on the server side
+#2 Only after completion is it sent to the frontend
+#3 The message() component displays it all at once
+# Action TODO: Update tis code to accomodate websocket
 import streamlit as st
 from streamlit_chat import message
 from langchain.text_splitter import RecursiveCharacterTextSplitter
