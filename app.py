@@ -1,5 +1,5 @@
 import streamlit as st
-from langchain_community.document_loaders import PyPDFLoader
+from streamlit_chat import message
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain.prompts import PromptTemplate
@@ -29,7 +29,10 @@ st.set_page_config(
 def init_session_state():
     session_state_vars = {
         "messages": [],
-        "vectorstore": None
+        "vectorstore": None,
+        "chat_history": [],
+        "generated": [],
+        "past": []
     }
 
     for key, value in session_state_vars.items():
@@ -60,12 +63,21 @@ except Exception as e:
     st.stop()
 
 # RAG prompt template
-prompt_template = """Answer the following question based only on the provided context:
-BEGIN CONTEXT
+prompt_template = """Use the following pieces of context and the chat history to answer the question. If the context doesn't contain the answer, use your general knowledge but indicate this clearly.
+
+Previous conversation:
+{chat_history}
+
+Context:
 {context}
-END CONTEXT
+
 Question: {input}
 Answer: """
+
+PROMPT = PromptTemplate(
+    input_variables=["chat_history", "context", "input"],
+    template=prompt_template
+)
 
 
 def extract_text_from_pdf(uploaded_file):
@@ -149,21 +161,35 @@ def process_documents(documents):
         return None
 
 
-def get_answer(question, use_context=True):
+def get_answer(question):
     try:
-        if use_context and st.session_state.vectorstore:
+        if st.session_state.vectorstore:
+            # Get chat history string
+            chat_history = "\n".join([
+                f"Human: {q}\nAssistant: {a}"
+                for q, a in zip(st.session_state.past, st.session_state.generated)
+            ])
+
             # RAG-based response
             docs = st.session_state.vectorstore.similarity_search(question, k=3)
             context = "\n".join([doc.page_content for doc in docs])
-            formatted_prompt = prompt_template.format(context=context, input=question)
+
+            # Format prompt with chat history
+            formatted_prompt = PROMPT.format(
+                chat_history=chat_history,
+                context=context,
+                input=question
+            )
+
             return llm.invoke(formatted_prompt).content
         else:
-            # Direct LLM response
+            # Direct LLM response when no context is available
             return llm.invoke(question).content
     except OpenAIError as e:
         return f"OpenAI API Error: {str(e)}"
     except Exception as e:
         return f"Error generating response: {str(e)}"
+
 
 
 # Streamlit UI
@@ -211,46 +237,42 @@ with st.sidebar:
             else:
                 st.sidebar.error("❌ No valid inputs provided")
 
-# Clear chat history button
-if st.sidebar.button("🗑️ Clear Chat History"):
-    st.session_state.messages = []
-    st.sidebar.success("Chat history cleared!")
+    # Clear chat history button
+    if st.button("🗑️ Clear Chat History"):
+        st.session_state.generated = []
+        st.session_state.past = []
+        st.session_state.messages = []
+        st.sidebar.success("Chat history cleared!")
 
-# Main chat interface
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Chat input
+question = st.chat_input("Ask your question here")
 
-if question := st.chat_input("Ask your question here"):
-    # Add user message to chat
-    st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
-        st.markdown(question)
+# Initialize containers for chat history and new responses
+chat_container = st.container()
 
-    # Generate and display response
-    with st.chat_message("assistant"):
-        if st.session_state.vectorstore:
-            # Show both RAG and direct responses
-            col1, col2 = st.columns(2)
-            with col1:
-                st.subheader("💡 Answer with Context")
-                with st.spinner("Generating context-aware response..."):
-                    rag_response = get_answer(question, use_context=True)
-                st.write(rag_response)
+# Display chat history
+with chat_container:
+    for i in range(len(st.session_state['generated'])):
+        message(st.session_state['past'][i], is_user=True, key=f"{i}_user")
+        message(st.session_state['generated'][i], key=str(i))
 
-            with col2:
-                st.subheader("🤖 Answer without Context")
-                with st.spinner("Generating direct response..."):
-                    direct_response = get_answer(question, use_context=False)
-                st.write(direct_response)
+# Handle new question
+if question:
+    # Display user message immediately
+    with chat_container:
+        message(question, is_user=True, key=f"{len(st.session_state['past'])}_user")
 
-            # Store the RAG response in chat history
-            st.session_state.messages.append({"role": "assistant", "content": rag_response})
-        else:
-            with st.spinner("Generating response..."):
-                response = get_answer(question, use_context=False)
-                st.write(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
+    # Generate response
+    with st.spinner("Thinking..."):
+        response = get_answer(question)
+
+    # Display assistant response immediately
+    with chat_container:
+        message(response, key=str(len(st.session_state['generated'])))
+
+    # Update session state after displaying messages
+    st.session_state.past.append(question)
+    st.session_state.generated.append(response)
 
 # Add some spacing at the bottom
 st.markdown("<br><br>", unsafe_allow_html=True)
