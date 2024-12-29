@@ -1,190 +1,256 @@
-from flask import Flask, request, render_template, jsonify, redirect, url_for
-from langchain.document_loaders import PyPDFLoader
+import streamlit as st
+from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
 from langchain.prompts import PromptTemplate
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 import requests
 import os
 import PyPDF2
 from bs4 import BeautifulSoup
 from langchain.schema import Document
 from dotenv import load_dotenv
-import logging
-
-# Set up logging
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
-
-# Initialize Flask app
-app = Flask(__name__,
-            template_folder=os.path.abspath('templates'),
-            static_folder=os.path.abspath('static'))
+import tempfile
+from openai import OpenAIError
 
 # Load environment variables
 load_dotenv()
 
+# Page configuration
+st.set_page_config(
+    page_title="Enterprise Chatbot",
+    page_icon="🤖",
+    layout="wide"
+)
+
+
+# Initialize session state
+def init_session_state():
+    session_state_vars = {
+        "messages": [],
+        "vectorstore": None
+    }
+
+    for key, value in session_state_vars.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+# Call initialization function
+init_session_state()
+
 # OpenAI Configuration
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
-# Validate environment variables
 if not OPENAI_API_KEY:
-    logger.error("Missing OpenAI API Key")
-    raise ValueError("Missing OpenAI API Key")
+    st.error("Please set your OpenAI API key in the .env file")
+    st.stop()
 
-# Initialize OpenAI embeddings
-embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+# Initialize OpenAI components
+try:
+    embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+    llm = ChatOpenAI(
+        model_name="gpt-3.5-turbo",
+        temperature=0.7,
+        openai_api_key=OPENAI_API_KEY
+    )
+except Exception as e:
+    st.error(f"Error initializing OpenAI components: {str(e)}")
+    st.stop()
 
-# Initialize ChatOpenAI
-llm = ChatOpenAI(
-    model_name="gpt-3.5-turbo",  # or "gpt-4" if you have access
-    temperature=0.7,
-    openai_api_key=OPENAI_API_KEY
-)
-
-# Prompt template for RAG
+# RAG prompt template
 prompt_template = """Answer the following question based only on the provided context:
 BEGIN CONTEXT
 {context}
 END CONTEXT
 Question: {input}
-Answer:"""
+Answer: """
 
 
-@app.route('/')
-def home():
-    try:
-        logger.debug("Rendering home template")
-        return render_template('home.html')
-    except Exception as e:
-        logger.error(f"Error rendering home template: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/qa')
-def qa():
-    try:
-        logger.debug("Rendering qa template")
-        return render_template('qa.html')
-    except Exception as e:
-        logger.error(f"Error rendering qa template: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
-def extract_text_from_pdf(file_path):
+def extract_text_from_pdf(uploaded_file):
     documents = []
-    with open(file_path, 'rb') as f:
-        reader = PyPDF2.PdfReader(f)
-        for i, page in enumerate(reader.pages):
-            text = page.extract_text()
-            documents.append(Document(page_content=text, metadata={"page_number": i + 1}))
+    try:
+        # Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_file_path = tmp_file.name
+
+        # Process the PDF
+        try:
+            with open(tmp_file_path, 'rb') as f:
+                reader = PyPDF2.PdfReader(f)
+                for i, page in enumerate(reader.pages):
+                    text = page.extract_text()
+                    if text.strip():  # Only add non-empty pages
+                        documents.append(Document(
+                            page_content=text,
+                            metadata={
+                                "page_number": i + 1,
+                                "source": uploaded_file.name
+                            }
+                        ))
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(tmp_file_path)
+            except Exception as e:
+                st.warning(f"Warning: Could not delete temporary file: {str(e)}")
+
+    except Exception as e:
+        st.error(f"Error processing PDF {uploaded_file.name}: {str(e)}")
+        return []
+
     return documents
 
 
 def crawl_website(url):
     try:
-        response = requests.get(url)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, 'html.parser')
-        paragraphs = soup.find_all('p')
-        content = "\n".join([p.get_text() for p in paragraphs])
+
+        # Extract text from paragraphs and other relevant tags
+        text_elements = soup.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'article'])
+        content = "\n".join([elem.get_text().strip() for elem in text_elements if elem.get_text().strip()])
+
+        if not content:
+            st.warning(f"No readable content found at {url}")
+            return []
+
         return [Document(page_content=content, metadata={"source": url})]
     except requests.RequestException as e:
-        raise RuntimeError(f"Failed to fetch website content: {e}")
+        st.error(f"Failed to fetch website content: {e}")
+        return []
 
 
-@app.route('/upload', methods=['POST'])
-def upload_inputs():
-    files = request.files.getlist('files')
-    url = request.form.get('url')
-
-    logger.debug(f"Received upload request - Files: {[f.filename for f in files]}, URL: {url}")
-
-    documents = []
-
-    # Process each uploaded PDF
-    for file in files:
-        if file and file.filename != '':
-            try:
-                import tempfile
-                file_path = os.path.join(tempfile.gettempdir(), file.filename)
-                file.save(file_path)
-                logger.debug(f"Processing PDF file: {file_path}")
-                documents += extract_text_from_pdf(file_path)
-                os.remove(file_path)
-            except Exception as e:
-                logger.error(f"Error processing PDF {file.filename}: {str(e)}")
-                return jsonify({'error': f"Error processing PDF {file.filename}: {str(e)}"}), 500
-
-    # Process URL if provided
-    if url and url.strip():
-        try:
-            logger.debug(f"Processing URL: {url}")
-            documents += crawl_website(url)
-        except Exception as e:
-            logger.error(f"Error processing URL {url}: {str(e)}")
-            return jsonify({'error': f"Error processing URL: {str(e)}"}), 500
-
+def process_documents(documents):
     if not documents:
-        return jsonify({'error': 'No valid inputs provided'}), 400
+        return None
 
     try:
-        # Split documents
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=50)
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len
+        )
         split_documents = text_splitter.split_documents(documents)
 
-        # Create vector store
-        vector = FAISS.from_documents(split_documents, embeddings)
-        global retriever
-        retriever = vector.as_retriever(search_kwargs={"k": 10})
+        if not split_documents:
+            st.warning("No content to process after splitting documents")
+            return None
 
-        logger.info("Successfully processed all inputs")
-        return jsonify({'message': 'Inputs processed successfully'}), 200
-
+        return FAISS.from_documents(split_documents, embeddings)
     except Exception as e:
-        logger.error(f"Error in document processing: {str(e)}")
-        return jsonify({'error': f"Failed to process inputs: {str(e)}"}), 500
+        st.error(f"Error processing documents: {str(e)}")
+        return None
 
 
-@app.route('/ask', methods=['POST'])
-def ask_question():
-    question = request.json.get('question')
-    if not question:
-        return jsonify({'error': 'No question provided'}), 400
-
+def get_answer(question, use_context=True):
     try:
-        # Retrieve relevant context
-        docs = retriever.get_relevant_documents(question)
-        context = " ".join([doc.page_content for doc in docs])
-
-        # Format prompt with context and question
-        formatted_prompt = prompt_template.format(context=context, input=question)
-
-        # Get response from OpenAI
-        response = llm.predict(formatted_prompt)
-        return jsonify({'answer': response})
-
+        if use_context and st.session_state.vectorstore:
+            # RAG-based response
+            docs = st.session_state.vectorstore.similarity_search(question, k=3)
+            context = "\n".join([doc.page_content for doc in docs])
+            formatted_prompt = prompt_template.format(context=context, input=question)
+            return llm.invoke(formatted_prompt).content
+        else:
+            # Direct LLM response
+            return llm.invoke(question).content
+    except OpenAIError as e:
+        return f"OpenAI API Error: {str(e)}"
     except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        return jsonify({'error': f"Error processing request: {str(e)}"}), 500
+        return f"Error generating response: {str(e)}"
 
 
-@app.route('/ask_direct', methods=['POST'])
-def ask_direct_question():
-    question = request.json.get('question')
-    if not question:
-        return jsonify({'error': 'No question provided'}), 400
+# Streamlit UI
+st.title("🤖 Enterprise Chatbot")
 
-    try:
-        # Get direct response from OpenAI
-        response = llm.predict(question)
-        return jsonify({'answer': response})
+# Sidebar for file upload and URL input
+with st.sidebar:
+    st.header("📚 Upload Knowledge Base")
+    uploaded_files = st.file_uploader(
+        "Upload PDF documents",
+        type=['pdf'],
+        accept_multiple_files=True,
+        help="Upload one or more PDF files to create the knowledge base"
+    )
 
-    except Exception as e:
-        logger.error(f"Error processing request: {str(e)}")
-        return jsonify({'error': f"Error processing request: {str(e)}"}), 500
+    url = st.text_input(
+        "Enter website URL",
+        placeholder="https://example.com",
+        help="Enter a website URL to extract content"
+    )
 
+    if st.button("🔄 Process Inputs", help="Click to process uploaded files and URL"):
+        with st.spinner("Processing inputs..."):
+            documents = []
 
-if __name__ == '__main__':
-    app.run(debug=True)
+            # Process PDFs
+            for uploaded_file in uploaded_files:
+                docs = extract_text_from_pdf(uploaded_file)
+                documents.extend(docs)
+                if docs:
+                    st.sidebar.success(f"Processed {uploaded_file.name}")
+
+            # Process URL
+            if url:
+                docs = crawl_website(url)
+                documents.extend(docs)
+                if docs:
+                    st.sidebar.success(f"Processed {url}")
+
+            if documents:
+                vectorstore = process_documents(documents)
+                if vectorstore:
+                    st.session_state.vectorstore = vectorstore
+                    st.sidebar.success("✅ Knowledge base updated successfully!")
+            else:
+                st.sidebar.error("❌ No valid inputs provided")
+
+# Clear chat history button
+if st.sidebar.button("🗑️ Clear Chat History"):
+    st.session_state.messages = []
+    st.sidebar.success("Chat history cleared!")
+
+# Main chat interface
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if question := st.chat_input("Ask your question here"):
+    # Add user message to chat
+    st.session_state.messages.append({"role": "user", "content": question})
+    with st.chat_message("user"):
+        st.markdown(question)
+
+    # Generate and display response
+    with st.chat_message("assistant"):
+        if st.session_state.vectorstore:
+            # Show both RAG and direct responses
+            col1, col2 = st.columns(2)
+            with col1:
+                st.subheader("💡 Answer with Context")
+                with st.spinner("Generating context-aware response..."):
+                    rag_response = get_answer(question, use_context=True)
+                st.write(rag_response)
+
+            with col2:
+                st.subheader("🤖 Answer without Context")
+                with st.spinner("Generating direct response..."):
+                    direct_response = get_answer(question, use_context=False)
+                st.write(direct_response)
+
+            # Store the RAG response in chat history
+            st.session_state.messages.append({"role": "assistant", "content": rag_response})
+        else:
+            with st.spinner("Generating response..."):
+                response = get_answer(question, use_context=False)
+                st.write(response)
+                st.session_state.messages.append({"role": "assistant", "content": response})
+
+# Add some spacing at the bottom
+st.markdown("<br><br>", unsafe_allow_html=True)
