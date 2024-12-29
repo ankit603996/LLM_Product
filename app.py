@@ -63,7 +63,10 @@ except Exception as e:
     st.stop()
 
 # RAG prompt template
-prompt_template = """Use the following pieces of context and the chat history to answer the question. If the context doesn't contain the answer, use your general knowledge but indicate this clearly.
+prompt_template = """You are a helpful and knowledgeable assistant. Answer the question using the provided context and chat history. If you need to use information beyond the context, do so naturally without explicitly mentioning it.
+
+Previous conversation:
+{chat_history}
 
 Previous conversation:
 {chat_history}
